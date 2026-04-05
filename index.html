@@ -1,0 +1,499 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>24H Kart Race Planner</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', sans-serif; background: #1a1a2e; color: #e0e0e0; padding: 24px; }
+  h1 { text-align: center; margin-bottom: 8px; color: #fff; font-size: 1.6rem; }
+  .subtitle { text-align: center; color: #888; margin-bottom: 28px; font-size: 0.9rem; }
+
+  .legend { display: flex; justify-content: center; gap: 16px; flex-wrap: wrap; margin-bottom: 32px; }
+  .legend-item {
+    display: flex; align-items: center; gap: 6px;
+    background: #16213e; padding: 6px 14px; border-radius: 6px; font-size: 0.85rem;
+  }
+  .legend-swatch { width: 18px; height: 18px; border-radius: 4px; }
+  .legend-stints { color: #888; font-size: 0.75rem; }
+
+  .section-title { font-size: 1.1rem; margin: 20px 0 8px 0; color: #ccc; }
+
+  .timeline-container { position: relative; margin-bottom: 12px; }
+  .time-axis {
+    display: flex; position: relative; height: 20px; margin-bottom: 2px;
+    font-size: 0.65rem; color: #666;
+  }
+  .time-mark { position: absolute; transform: translateX(-50%); }
+
+  .timeline {
+    display: flex; height: 48px; border-radius: 6px; overflow: hidden;
+    border: 1px solid #333;
+  }
+  .stint-block {
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.65rem; font-weight: 600; color: #000;
+    border-right: 1px solid rgba(0,0,0,0.2);
+    position: relative; cursor: pointer;
+    transition: filter 0.15s;
+  }
+  .stint-block:hover { filter: brightness(1.2); }
+  .stint-block .stint-tooltip {
+    display: none; position: absolute; bottom: 110%; left: 50%;
+    transform: translateX(-50%); background: #000; color: #fff;
+    padding: 4px 8px; border-radius: 4px; font-size: 0.7rem;
+    white-space: nowrap; z-index: 10;
+  }
+  .stint-block:hover .stint-tooltip { display: block; }
+
+  .stint-dropdown {
+    position: fixed;
+    background: #16213e; border: 1px solid #444; border-radius: 6px;
+    z-index: 100; min-width: 120px; overflow: hidden;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+  }
+  .stint-dropdown-item {
+    display: flex; align-items: center; gap: 8px;
+    padding: 6px 12px; cursor: pointer; font-size: 0.8rem;
+    color: #e0e0e0; transition: background 0.1s;
+  }
+  .stint-dropdown-item:hover { background: #1a3a5c; }
+  .stint-dropdown-item .dd-swatch {
+    width: 12px; height: 12px; border-radius: 3px; flex-shrink: 0;
+  }
+  .stint-dropdown-item.active { background: #1a3a5c; font-weight: 700; }
+
+  .strategist-timeline { height: 36px; }
+  .strategist-timeline .stint-block { font-size: 0.55rem; opacity: 0.85; }
+
+  .stats-grid {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 12px; margin-top: 24px;
+  }
+  .driver-card {
+    background: #16213e; border-radius: 8px; padding: 14px;
+    border-left: 4px solid;
+  }
+  .driver-card h3 { font-size: 0.95rem; margin-bottom: 8px; }
+  .driver-card .stat { font-size: 0.8rem; color: #aaa; margin: 3px 0; }
+  .driver-card .stat span { color: #fff; }
+  .bar-container { height: 6px; background: #0a0a1a; border-radius: 3px; margin-top: 4px; }
+  .bar-fill { height: 100%; border-radius: 3px; }
+
+  .sleep-block { background: repeating-linear-gradient(45deg, transparent, transparent 3px, rgba(0,0,0,0.15) 3px, rgba(0,0,0,0.15) 6px); }
+
+  .strat-config {
+    font-size: 0.8rem; color: #888; font-weight: 400; display: flex; align-items: center; gap: 6px;
+  }
+  .strat-config select {
+    background: #16213e; color: #e0e0e0; border: 1px solid #444; border-radius: 4px;
+    padding: 3px 8px; font-size: 0.8rem; cursor: pointer;
+  }
+
+  .stint-table {
+    width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 0.85rem;
+  }
+  .stint-table th {
+    background: #16213e; padding: 8px 12px; text-align: left; color: #888;
+    font-weight: 600; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.5px;
+  }
+  .stint-table td { padding: 6px 12px; border-bottom: 1px solid #1e2a45; }
+  .stint-table tr:hover td { background: #16213e; }
+  .stint-table .driver-cell { display: flex; align-items: center; gap: 8px; }
+  .stint-table .table-swatch { width: 10px; height: 10px; border-radius: 3px; flex-shrink: 0; }
+</style>
+</head>
+<body>
+
+<h1>24H Kart Race Planner</h1>
+<p class="subtitle">39 stints &middot; 38 pitstops &middot; 7 drivers &middot; equal drive time per driver</p>
+
+<div class="legend" id="legend"></div>
+
+<div class="section-title">Racing</div>
+<div class="timeline-container">
+  <div class="time-axis" id="time-axis-race"></div>
+  <div class="timeline" id="race-timeline"></div>
+</div>
+
+<div class="section-title" style="display:flex;align-items:center;gap:12px;">
+  Strategists (2 per shift, click to assign)
+  <label class="strat-config">
+    Shift length:
+    <select id="strat-block-select">
+      <option value="60">1 hour</option>
+      <option value="90">1.5 hours</option>
+      <option value="120" selected>2 hours</option>
+      <option value="150">2.5 hours</option>
+      <option value="180">3 hours</option>
+    </select>
+  </label>
+</div>
+<div class="timeline-container">
+  <div class="time-axis" id="time-axis-strat"></div>
+  <div class="timeline strategist-timeline" id="strat-timeline-1"></div>
+  <div style="height:2px"></div>
+  <div class="timeline strategist-timeline" id="strat-timeline-2"></div>
+</div>
+
+<div class="section-title">Stint Schedule</div>
+<table class="stint-table" id="stint-table">
+  <thead><tr><th>#</th><th>Start</th><th>End</th><th>Duration</th><th>Driver</th></tr></thead>
+  <tbody></tbody>
+</table>
+
+<div class="section-title">Per-Driver Breakdown</div>
+<div class="stats-grid" id="stats-grid"></div>
+
+<script>
+// ── CONFIG ──────────────────────────────────────────────────────────────
+const TOTAL_STINTS = 39;
+const RACE_HOURS = 24;
+const RACE_MINUTES = RACE_HOURS * 60;
+const RACE_START = 12;
+let STRATEGY_BLOCK_MINUTES = 120; // configurable: strategist shift length in minutes
+
+const drivers = [
+  { id: 0, name: "Max",     color: "#e74c3c" },
+  { id: 1, name: "Remy",   color: "#d1b735" },
+  { id: 2, name: "Boris",    color: "#2ecc71" },
+  { id: 3, name: "Remco",    color: "#3d31f8" },
+  { id: 4, name: "Roel",   color: "#c57028" },
+  { id: 5, name: "Bouw",     color: "#cf4cc1" },
+  { id: 6, name: "Jesper",    color: "#6c646e" },
+];
+
+// ── STINT ASSIGNMENT (default, overridden by localStorage) ─────────────
+// Driver ID for each of the 39 stints. 3 drivers do 5 stints, 4 do 6.
+// 3×5 + 4×6 = 39 ✓
+const defaultRaceSchedule = [
+  1, // stint 0
+  0,
+  4,
+  0,
+  1,
+  6,
+  0,
+  6,
+  3,
+  6,
+  3,
+  2,
+  5,
+  2,
+  5,
+  0,
+  5,
+  0,
+  1,
+  4,
+  1,
+  4,
+  1,
+  4,
+  6,
+  2,
+  6,
+  2,
+  6,
+  2,
+  3,
+  2,
+  3,
+  0,
+  3,
+  5,
+  1,
+  5,
+  4
+]
+let raceSchedule = [...defaultRaceSchedule];
+
+// ── LOCAL STORAGE ─────────────────────────────────────────────────────
+const STORAGE_KEY = 'kartRacePlanner';
+
+function saveState() {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify({
+    raceSchedule,
+    stratSchedule,
+    stratBlockMinutes: STRATEGY_BLOCK_MINUTES,
+  }));
+}
+
+function loadState() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return;
+    const state = JSON.parse(raw);
+    if (Array.isArray(state.raceSchedule) && state.raceSchedule.length === TOTAL_STINTS) {
+      raceSchedule = state.raceSchedule;
+    }
+    if (typeof state.stratBlockMinutes === 'number') {
+      STRATEGY_BLOCK_MINUTES = state.stratBlockMinutes;
+      document.getElementById('strat-block-select').value = String(STRATEGY_BLOCK_MINUTES);
+    }
+    if (Array.isArray(state.stratSchedule) && state.stratSchedule.length === 2) {
+      stratSchedule = state.stratSchedule;
+    }
+  } catch (e) { /* ignore corrupt data */ }
+}
+
+// ── STINT TIMING ───────────────────────────────────────────────────────
+// Each driver drives equal total time: 1440 / 7 minutes.
+// Drivers with more stints get shorter stints.
+// Stint boundaries are rounded to whole minutes.
+function computeStintTiming(raceSchedule, drivers) {
+  const numDrivers = drivers.length;
+  const driverMinutes = RACE_MINUTES / numDrivers; // exact per-driver total
+
+  // Count stints per driver
+  const stintCounts = new Array(numDrivers).fill(0);
+  raceSchedule.forEach(d => stintCounts[d]++);
+
+  // Per-driver stint duration (exact, in minutes)
+  const driverStintDuration = stintCounts.map(c => c > 0 ? driverMinutes / c : 0);
+
+  // Track how many stints each driver has had so far
+  const driverStintIndex = new Array(numDrivers).fill(0);
+
+  // Compute start/end minute for each stint, rounded to whole minutes
+  const stintTimes = []; // { startMin, endMin, durationMin }
+  raceSchedule.forEach((driverId, i) => {
+    const idx = driverStintIndex[driverId];
+    const exactStart = driverStintDuration[driverId] * idx;
+    const exactEnd = driverStintDuration[driverId] * (idx + 1);
+
+    // But we need cumulative minutes from race start, not per-driver.
+    // We'll compute cumulatively instead.
+    driverStintIndex[driverId]++;
+  });
+
+  // Recompute: cumulative from race start
+  // Each stint's duration in minutes = driverStintDuration[driver of that stint]
+  // Accumulate and round boundaries to nearest minute
+  let cumulativeExact = 0;
+  const times = [];
+  raceSchedule.forEach((driverId) => {
+    const dur = driverStintDuration[driverId];
+    const startExact = cumulativeExact;
+    cumulativeExact += dur;
+    const startMin = Math.round(startExact);
+    const endMin = Math.round(cumulativeExact);
+    times.push({ startMin, endMin, durationMin: endMin - startMin });
+  });
+
+  return { times, driverStintDuration, stintCounts };
+}
+
+// ── STRATEGY BLOCKS (fixed time blocks, manually assigned) ────────────
+function buildStratBlocks() {
+  const numBlocks = Math.ceil(RACE_MINUTES / STRATEGY_BLOCK_MINUTES);
+  const blocks = [];
+  for (let i = 0; i < numBlocks; i++) {
+    const startMin = i * STRATEGY_BLOCK_MINUTES;
+    const endMin = Math.min((i + 1) * STRATEGY_BLOCK_MINUTES, RACE_MINUTES);
+    blocks.push({ startMin, endMin, durationMin: endMin - startMin });
+  }
+  return blocks;
+}
+
+// stratSchedule[row][blockIndex] = driverId — manually editable
+// row 0 = strategist 1, row 1 = strategist 2
+const defaultStratSchedule = [
+  [5, 3, 4, 0, 6, 2, 5, 0, 1, 5, 2, 0],
+  [6, 2, 1, 4, 3, 6, 3, 1, 2, 0, 4, 5],
+];
+let stratSchedule = defaultStratSchedule.map(r => [...r]);
+
+function initStratSchedule() {
+  stratSchedule = defaultStratSchedule.map(r => [...r]);
+}
+
+// ── RENDERING ──────────────────────────────────────────────────────────
+let openDropdown = null;
+
+function formatMinutes(raceMin) {
+  const totalMin = RACE_START * 60 + raceMin;
+  const h = Math.floor(totalMin / 60) % 24;
+  const m = totalMin % 60;
+  return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`;
+}
+
+function renderTimeAxis(containerId) {
+  const el = document.getElementById(containerId);
+  el.innerHTML = '';
+  for (let h = 0; h <= 24; h += 2) {
+    const pct = (h / 24) * 100;
+    const clockH = (RACE_START + h) % 24;
+    el.innerHTML += `<span class="time-mark" style="left:${pct}%">${String(clockH).padStart(2,'0')}:00</span>`;
+  }
+}
+
+function closeDropdown() {
+  if (openDropdown) { openDropdown.remove(); openDropdown = null; }
+}
+
+function showDriverDropdown(anchorEl, currentDriverId, onSelect) {
+  closeDropdown();
+  const rect = anchorEl.getBoundingClientRect();
+  const dd = document.createElement('div');
+  dd.className = 'stint-dropdown';
+  dd.style.left = rect.left + rect.width / 2 - 60 + 'px';
+  dd.style.top = rect.bottom + 4 + 'px';
+  drivers.forEach(d => {
+    const item = document.createElement('div');
+    item.className = 'stint-dropdown-item' + (currentDriverId === d.id ? ' active' : '');
+    item.innerHTML = `<span class="dd-swatch" style="background:${d.color}"></span>${d.name}`;
+    item.addEventListener('click', (e) => {
+      e.stopPropagation();
+      onSelect(d.id);
+      closeDropdown();
+      renderAll();
+    });
+    dd.appendChild(item);
+  });
+  document.body.appendChild(dd);
+  openDropdown = dd;
+}
+
+document.addEventListener('click', (e) => {
+  if (openDropdown && !openDropdown.contains(e.target)) closeDropdown();
+});
+
+function renderAll() {
+  const { times, driverStintDuration, stintCounts } = computeStintTiming(raceSchedule, drivers);
+  const blocks = buildStratBlocks();
+
+  // Ensure stratSchedule has the right number of blocks (in case block size changed)
+  for (let row = 0; row < 2; row++) {
+    while (stratSchedule[row].length < blocks.length) {
+      stratSchedule[row].push((stratSchedule[row].length + row) % drivers.length);
+    }
+    stratSchedule[row].length = blocks.length;
+  }
+
+  // Legend — show stint count and per-stint duration
+  const legend = document.getElementById('legend');
+  legend.innerHTML = '';
+  drivers.forEach((d, i) => {
+    const count = stintCounts[i];
+    const durMin = count > 0 ? Math.round(driverStintDuration[i]) : 0;
+    legend.innerHTML += `
+      <div class="legend-item">
+        <div class="legend-swatch" style="background:${d.color}"></div>
+        ${d.name} <span class="legend-stints">(${count} &times; ${durMin} min)</span>
+      </div>`;
+  });
+
+  // Time axes
+  renderTimeAxis('time-axis-race');
+  renderTimeAxis('time-axis-strat');
+
+  // Race timeline — variable width per stint
+  const raceTL = document.getElementById('race-timeline');
+  raceTL.innerHTML = '';
+  raceSchedule.forEach((driverId, stint) => {
+    const d = drivers[driverId];
+    const t = times[stint];
+    const widthPct = (t.durationMin / RACE_MINUTES) * 100;
+    const block = document.createElement('div');
+    block.className = 'stint-block';
+    block.style.cssText = `width:${widthPct}%;background:${d.color}`;
+    block.innerHTML = `${d.name.substring(0, 2)}<span class="stint-tooltip">Stint ${stint + 1}: ${d.name}<br>${formatMinutes(t.startMin)} – ${formatMinutes(t.endMin)} (${t.durationMin} min)</span>`;
+    block.addEventListener('click', (e) => {
+      e.stopPropagation();
+      showDriverDropdown(block, driverId, (newId) => { raceSchedule[stint] = newId; });
+    });
+    raceTL.appendChild(block);
+  });
+
+  // Strategist timelines — fixed blocks, clickable
+  [0, 1].forEach(row => {
+    const el = document.getElementById(`strat-timeline-${row + 1}`);
+    el.innerHTML = '';
+    blocks.forEach((bl, b) => {
+      const driverId = stratSchedule[row][b];
+      const d = drivers[driverId];
+      const widthPct = (bl.durationMin / RACE_MINUTES) * 100;
+      const blk = document.createElement('div');
+      blk.className = 'stint-block';
+      blk.style.cssText = `width:${widthPct}%;background:${d.color}`;
+      blk.innerHTML = `${d.name.substring(0, 2)}<span class="stint-tooltip">Strategist: ${d.name}<br>${formatMinutes(bl.startMin)} – ${formatMinutes(bl.endMin)}</span>`;
+      blk.addEventListener('click', (e) => {
+        e.stopPropagation();
+        showDriverDropdown(blk, driverId, (newId) => { stratSchedule[row][b] = newId; });
+      });
+      el.appendChild(blk);
+    });
+  });
+
+  // Stint table
+  const tbody = document.querySelector('#stint-table tbody');
+  tbody.innerHTML = '';
+  raceSchedule.forEach((driverId, s) => {
+    const d = drivers[driverId];
+    const t = times[s];
+    tbody.innerHTML += `<tr>
+      <td>${s + 1}</td>
+      <td>${formatMinutes(t.startMin)}</td>
+      <td>${formatMinutes(t.endMin)}</td>
+      <td>${t.durationMin} min</td>
+      <td><div class="driver-cell"><span class="table-swatch" style="background:${d.color}"></span>${d.name}</div></td>
+    </tr>`;
+  });
+
+  // Stats cards
+  const grid = document.getElementById('stats-grid');
+  grid.innerHTML = '';
+  const fmtHrs = (min) => (min / 60).toFixed(1);
+  drivers.forEach((d, i) => {
+    const raceStintCount = stintCounts[i];
+    const raceMin = times.reduce((sum, t, s) => raceSchedule[s] === i ? sum + t.durationMin : sum, 0);
+    const durMin = raceStintCount > 0 ? Math.round(driverStintDuration[i]) : 0;
+
+    // Strategy time from blocks (excluding overlap with racing)
+    let stratMin = 0, stratBlockCount = 0;
+    blocks.forEach((bl, b) => {
+      if (stratSchedule[0][b] !== i && stratSchedule[1][b] !== i) return;
+      stratBlockCount++;
+      // Subtract any racing time that overlaps with this strategy block
+      let racingOverlap = 0;
+      times.forEach((t, s) => {
+        if (raceSchedule[s] !== i) return;
+        const overlapStart = Math.max(bl.startMin, t.startMin);
+        const overlapEnd = Math.min(bl.endMin, t.endMin);
+        if (overlapEnd > overlapStart) racingOverlap += overlapEnd - overlapStart;
+      });
+      stratMin += bl.durationMin - racingOverlap;
+    });
+
+    const restMin = RACE_MINUTES - raceMin - stratMin;
+
+    grid.innerHTML += `
+      <div class="driver-card" style="border-color:${d.color}">
+        <h3 style="color:${d.color}">${d.name}</h3>
+        <div class="stat">Racing: <span>${raceStintCount} stints × ${durMin} min = ${fmtHrs(raceMin)}h</span></div>
+        <div class="stat">Strategy: <span>${stratBlockCount} shifts (${fmtHrs(stratMin)}h)</span></div>
+        <div class="stat">Rest: <span>${fmtHrs(restMin)}h</span></div>
+        <div class="bar-container">
+          <div class="bar-fill" style="width:${(raceMin/RACE_MINUTES)*100}%;background:${d.color}"></div>
+        </div>
+      </div>`;
+  });
+
+  saveState();
+}
+
+// Re-init strategy schedule when block size changes
+document.getElementById('strat-block-select').addEventListener('change', (e) => {
+  STRATEGY_BLOCK_MINUTES = parseInt(e.target.value);
+  initStratSchedule();
+  renderAll();
+});
+
+loadState();
+renderAll();
+</script>
+</body>
+</html>
