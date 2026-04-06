@@ -137,13 +137,12 @@
 <div class="section-title" style="display:flex;align-items:center;gap:12px;">
   Strategists (2 per shift, click to assign)
   <label class="strat-config">
-    Shift length:
+    Shifts:
     <select id="strat-block-select">
-      <option value="60">1 hour</option>
-      <option value="90">1.5 hours</option>
-      <option value="120" selected>2 hours</option>
-      <option value="150">2.5 hours</option>
-      <option value="180">3 hours</option>
+      <option value="7">7 shifts (~3h 26min)</option>
+      <option value="14" selected>14 shifts (~1h 43min)</option>
+      <option value="21">21 shifts (~1h 9min)</option>
+      <option value="28">28 shifts (~51min)</option>
     </select>
   </label>
 </div>
@@ -174,7 +173,7 @@ const PITSTOP_MINUTES = PITSTOP_SECONDS / 60; // 1.5 min
 const NUM_PITSTOPS = TOTAL_STINTS - 1; // 38
 const TOTAL_PITSTOP_MINUTES = NUM_PITSTOPS * PITSTOP_MINUTES; // 57 min
 const DRIVING_MINUTES = RACE_MINUTES - TOTAL_PITSTOP_MINUTES; // 1383 min
-let STRATEGY_BLOCK_MINUTES = 120; // configurable: strategist shift length in minutes
+let STRATEGY_NUM_BLOCKS = 14; // must be multiple of 7 for fairness
 
 const drivers = [
   { id: 0, name: "Max",     color: "#e74c3c" },
@@ -239,7 +238,7 @@ function saveState() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify({
     raceSchedule,
     stratSchedule,
-    stratBlockMinutes: STRATEGY_BLOCK_MINUTES,
+    stratNumBlocks: STRATEGY_NUM_BLOCKS,
   }));
 }
 
@@ -251,9 +250,9 @@ function loadState() {
     if (Array.isArray(state.raceSchedule) && state.raceSchedule.length === TOTAL_STINTS) {
       raceSchedule = state.raceSchedule;
     }
-    if (typeof state.stratBlockMinutes === 'number') {
-      STRATEGY_BLOCK_MINUTES = state.stratBlockMinutes;
-      document.getElementById('strat-block-select').value = String(STRATEGY_BLOCK_MINUTES);
+    if (typeof state.stratNumBlocks === 'number') {
+      STRATEGY_NUM_BLOCKS = state.stratNumBlocks;
+      document.getElementById('strat-block-select').value = String(STRATEGY_NUM_BLOCKS);
     }
     if (Array.isArray(state.stratSchedule) && state.stratSchedule.length === 2) {
       stratSchedule = state.stratSchedule;
@@ -295,11 +294,10 @@ function computeStintTiming(raceSchedule, drivers) {
 
 // ── STRATEGY BLOCKS (fixed time blocks, manually assigned) ────────────
 function buildStratBlocks() {
-  const numBlocks = Math.ceil(RACE_MINUTES / STRATEGY_BLOCK_MINUTES);
   const blocks = [];
-  for (let i = 0; i < numBlocks; i++) {
-    const startMin = i * STRATEGY_BLOCK_MINUTES;
-    const endMin = Math.min((i + 1) * STRATEGY_BLOCK_MINUTES, RACE_MINUTES);
+  for (let i = 0; i < STRATEGY_NUM_BLOCKS; i++) {
+    const startMin = Math.round((i / STRATEGY_NUM_BLOCKS) * RACE_MINUTES);
+    const endMin = Math.round(((i + 1) / STRATEGY_NUM_BLOCKS) * RACE_MINUTES);
     blocks.push({ startMin, endMin, durationMin: endMin - startMin });
   }
   return blocks;
@@ -526,7 +524,7 @@ function renderAll() {
 
 // Re-init strategy schedule when block size changes
 document.getElementById('strat-block-select').addEventListener('change', (e) => {
-  STRATEGY_BLOCK_MINUTES = parseInt(e.target.value);
+  STRATEGY_NUM_BLOCKS = parseInt(e.target.value);
   initStratSchedule();
   renderAll();
 });
