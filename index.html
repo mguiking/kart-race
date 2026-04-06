@@ -64,6 +64,18 @@
   }
   .stint-dropdown-item.active { background: #1a3a5c; font-weight: 700; }
 
+  .pitstop-block {
+    background: #111; flex-shrink: 0;
+    position: relative;
+  }
+  .pitstop-block .stint-tooltip {
+    display: none; position: absolute; bottom: 110%; left: 50%;
+    transform: translateX(-50%); background: #000; color: #fff;
+    padding: 4px 8px; border-radius: 4px; font-size: 0.7rem;
+    white-space: nowrap; z-index: 10;
+  }
+  .pitstop-block:hover .stint-tooltip { display: block; }
+
   .strategist-timeline { height: 36px; }
   .strategist-timeline .stint-block { font-size: 0.55rem; opacity: 0.85; }
 
@@ -81,8 +93,6 @@
   .bar-container { height: 6px; background: #0a0a1a; border-radius: 3px; margin-top: 4px; }
   .bar-fill { height: 100%; border-radius: 3px; }
 
-  .sleep-block { background: repeating-linear-gradient(45deg, transparent, transparent 3px, rgba(0,0,0,0.15) 3px, rgba(0,0,0,0.15) 6px); }
-
   .strat-config {
     font-size: 0.8rem; color: #888; font-weight: 400; display: flex; align-items: center; gap: 6px;
   }
@@ -92,13 +102,20 @@
   }
 
   .stint-table {
-    width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 0.85rem;
+    width: 100%; max-width: 1000px; border-collapse: collapse; margin-top: 8px; font-size: 0.85rem;
   }
   .stint-table th {
     background: #16213e; padding: 8px 12px; text-align: left; color: #888;
     font-weight: 600; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.5px;
   }
   .stint-table td { padding: 6px 12px; border-bottom: 1px solid #1e2a45; }
+  .stint-table tr.current-row td {
+    animation: flash 1.5s ease-in-out infinite;
+  }
+  @keyframes flash {
+    0%, 100% { background: rgba(255, 255, 255, 0.05); }
+    50% { background: rgba(255, 255, 255, 0.18); }
+  }
   .stint-table tr:hover td { background: #16213e; }
   .stint-table .driver-cell { display: flex; align-items: center; gap: 8px; }
   .stint-table .table-swatch { width: 10px; height: 10px; border-radius: 3px; flex-shrink: 0; }
@@ -107,7 +124,7 @@
 <body>
 
 <h1>24H Kart Race Planner</h1>
-<p class="subtitle">39 stints &middot; 38 pitstops &middot; 7 drivers &middot; equal drive time per driver</p>
+<p class="subtitle">39 stints &middot; 7 drivers &middot; equal drive time per driver</p>
 
 <div class="legend" id="legend"></div>
 
@@ -152,6 +169,11 @@ const TOTAL_STINTS = 39;
 const RACE_HOURS = 24;
 const RACE_MINUTES = RACE_HOURS * 60;
 const RACE_START = 12;
+const PITSTOP_SECONDS = 90;
+const PITSTOP_MINUTES = PITSTOP_SECONDS / 60; // 1.5 min
+const NUM_PITSTOPS = TOTAL_STINTS - 1; // 38
+const TOTAL_PITSTOP_MINUTES = NUM_PITSTOPS * PITSTOP_MINUTES; // 57 min
+const DRIVING_MINUTES = RACE_MINUTES - TOTAL_PITSTOP_MINUTES; // 1383 min
 let STRATEGY_BLOCK_MINUTES = 120; // configurable: strategist shift length in minutes
 
 const drivers = [
@@ -240,47 +262,32 @@ function loadState() {
 }
 
 // ── STINT TIMING ───────────────────────────────────────────────────────
-// Each driver drives equal total time: 1440 / 7 minutes.
-// Drivers with more stints get shorter stints.
+// Each driver drives equal total time: DRIVING_MINUTES / 7.
+// 38 pitstops of 1.5 min each are inserted between stints.
 // Stint boundaries are rounded to whole minutes.
 function computeStintTiming(raceSchedule, drivers) {
   const numDrivers = drivers.length;
-  const driverMinutes = RACE_MINUTES / numDrivers; // exact per-driver total
+  const driverDriveMinutes = DRIVING_MINUTES / numDrivers; // equal driving time per driver
 
   // Count stints per driver
   const stintCounts = new Array(numDrivers).fill(0);
   raceSchedule.forEach(d => stintCounts[d]++);
 
-  // Per-driver stint duration (exact, in minutes)
-  const driverStintDuration = stintCounts.map(c => c > 0 ? driverMinutes / c : 0);
+  // Per-driver stint duration (driving only, exact, in minutes)
+  const driverStintDuration = stintCounts.map(c => c > 0 ? driverDriveMinutes / c : 0);
 
-  // Track how many stints each driver has had so far
-  const driverStintIndex = new Array(numDrivers).fill(0);
-
-  // Compute start/end minute for each stint, rounded to whole minutes
-  const stintTimes = []; // { startMin, endMin, durationMin }
-  raceSchedule.forEach((driverId, i) => {
-    const idx = driverStintIndex[driverId];
-    const exactStart = driverStintDuration[driverId] * idx;
-    const exactEnd = driverStintDuration[driverId] * (idx + 1);
-
-    // But we need cumulative minutes from race start, not per-driver.
-    // We'll compute cumulatively instead.
-    driverStintIndex[driverId]++;
-  });
-
-  // Recompute: cumulative from race start
-  // Each stint's duration in minutes = driverStintDuration[driver of that stint]
-  // Accumulate and round boundaries to nearest minute
+  // Accumulate race clock: stint driving + pitstop after each stint (except last)
   let cumulativeExact = 0;
-  const times = [];
-  raceSchedule.forEach((driverId) => {
+  const times = []; // { startMin, endMin, durationMin, pitstopAfter }
+  raceSchedule.forEach((driverId, i) => {
     const dur = driverStintDuration[driverId];
     const startExact = cumulativeExact;
     cumulativeExact += dur;
     const startMin = Math.round(startExact);
     const endMin = Math.round(cumulativeExact);
-    times.push({ startMin, endMin, durationMin: endMin - startMin });
+    const hasPitstop = i < raceSchedule.length - 1;
+    times.push({ startMin, endMin, durationMin: endMin - startMin, pitstopAfter: hasPitstop });
+    if (hasPitstop) cumulativeExact += PITSTOP_MINUTES;
   });
 
   return { times, driverStintDuration, stintCounts };
@@ -316,14 +323,22 @@ let openDropdown = null;
 function formatMinutes(raceMin) {
   const totalMin = RACE_START * 60 + raceMin;
   const h = Math.floor(totalMin / 60) % 24;
-  const m = totalMin % 60;
+  const m = Math.floor(totalMin % 60);
   return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`;
+}
+
+function formatHMS(raceMin) {
+  const totalSec = Math.round((RACE_START * 60 + raceMin) * 60);
+  const h = Math.floor(totalSec / 3600) % 24;
+  const m = Math.floor((totalSec % 3600) / 60);
+  const s = totalSec % 60;
+  return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
 }
 
 function renderTimeAxis(containerId) {
   const el = document.getElementById(containerId);
   el.innerHTML = '';
-  for (let h = 0; h <= 24; h += 2) {
+  for (let h = 0; h <= 24; h += 1) {
     const pct = (h / 24) * 100;
     const clockH = (RACE_START + h) % 24;
     el.innerHTML += `<span class="time-mark" style="left:${pct}%">${String(clockH).padStart(2,'0')}:00</span>`;
@@ -390,9 +405,10 @@ function renderAll() {
   renderTimeAxis('time-axis-race');
   renderTimeAxis('time-axis-strat');
 
-  // Race timeline — variable width per stint
+  // Race timeline — variable width per stint with pitstops
   const raceTL = document.getElementById('race-timeline');
   raceTL.innerHTML = '';
+  const pitWidthPct = (PITSTOP_MINUTES / RACE_MINUTES) * 100;
   raceSchedule.forEach((driverId, stint) => {
     const d = drivers[driverId];
     const t = times[stint];
@@ -400,12 +416,20 @@ function renderAll() {
     const block = document.createElement('div');
     block.className = 'stint-block';
     block.style.cssText = `width:${widthPct}%;background:${d.color}`;
-    block.innerHTML = `${d.name.substring(0, 2)}<span class="stint-tooltip">Stint ${stint + 1}: ${d.name}<br>${formatMinutes(t.startMin)} – ${formatMinutes(t.endMin)} (${t.durationMin} min)</span>`;
+    block.innerHTML = `${d.name.substring(0, 3)}<span class="stint-tooltip">Stint ${stint + 1}: ${d.name}<br>${formatMinutes(t.startMin)} – ${formatMinutes(t.endMin)} (${t.durationMin} min)</span>`;
     block.addEventListener('click', (e) => {
       e.stopPropagation();
       showDriverDropdown(block, driverId, (newId) => { raceSchedule[stint] = newId; });
     });
     raceTL.appendChild(block);
+
+    if (t.pitstopAfter) {
+      const pit = document.createElement('div');
+      pit.className = 'pitstop-block';
+      pit.style.cssText = `width:${pitWidthPct}%`;
+      pit.innerHTML = `<span class="stint-tooltip">Pitstop ${stint + 1}<br>${formatMinutes(t.endMin)} – ${formatMinutes(t.endMin + PITSTOP_MINUTES)} (${PITSTOP_SECONDS}s)</span>`;
+      raceTL.appendChild(pit);
+    }
   });
 
   // Strategist timelines — fixed blocks, clickable
@@ -419,7 +443,7 @@ function renderAll() {
       const blk = document.createElement('div');
       blk.className = 'stint-block';
       blk.style.cssText = `width:${widthPct}%;background:${d.color}`;
-      blk.innerHTML = `${d.name.substring(0, 2)}<span class="stint-tooltip">Strategist: ${d.name}<br>${formatMinutes(bl.startMin)} – ${formatMinutes(bl.endMin)}</span>`;
+      blk.innerHTML = `${d.name.substring(0, 3)}<span class="stint-tooltip">Strategist: ${d.name}<br>${formatMinutes(bl.startMin)} – ${formatMinutes(bl.endMin)}</span>`;
       blk.addEventListener('click', (e) => {
         e.stopPropagation();
         showDriverDropdown(blk, driverId, (newId) => { stratSchedule[row][b] = newId; });
@@ -428,19 +452,34 @@ function renderAll() {
     });
   });
 
-  // Stint table
+  // Stint table — highlight current row
+  const now = new Date();
+  const nowMin = ((now.getHours() * 60 + now.getMinutes()) - RACE_START * 60 + RACE_MINUTES) % RACE_MINUTES;
+
   const tbody = document.querySelector('#stint-table tbody');
   tbody.innerHTML = '';
   raceSchedule.forEach((driverId, s) => {
     const d = drivers[driverId];
     const t = times[s];
-    tbody.innerHTML += `<tr>
+    const isCurrent = nowMin >= t.startMin && nowMin < t.endMin;
+    const pitEnd = t.endMin + PITSTOP_MINUTES;
+    const isPitCurrent = t.pitstopAfter && nowMin >= t.endMin && nowMin < pitEnd;
+    tbody.innerHTML += `<tr${isCurrent ? ' class="current-row"' : ''}>
       <td>${s + 1}</td>
-      <td>${formatMinutes(t.startMin)}</td>
-      <td>${formatMinutes(t.endMin)}</td>
+      <td>${formatHMS(t.startMin)}</td>
+      <td>${formatHMS(t.endMin)}</td>
       <td>${t.durationMin} min</td>
       <td><div class="driver-cell"><span class="table-swatch" style="background:${d.color}"></span>${d.name}</div></td>
     </tr>`;
+    if (t.pitstopAfter) {
+      tbody.innerHTML += `<tr style="color:darkgray;font-size:0.75rem"${isPitCurrent ? ' class="current-row"' : ''}>
+        <td>Pit ${s+1}</td>
+        <td>${formatHMS(t.endMin)}</td>
+        <td>${formatHMS(pitEnd)}</td>
+        <td>${PITSTOP_SECONDS}s</td>
+        <td></td>
+      </tr>`;
+    }
   });
 
   // Stats cards
@@ -494,6 +533,26 @@ document.getElementById('strat-block-select').addEventListener('change', (e) => 
 
 loadState();
 renderAll();
+
+// Update current-row highlight every 30 seconds
+setInterval(() => {
+  const now = new Date();
+  const nowMin = ((now.getHours() * 60 + now.getMinutes()) - RACE_START * 60 + RACE_MINUTES) % RACE_MINUTES;
+  const rows = document.querySelectorAll('#stint-table tbody tr');
+  const { times } = computeStintTiming(raceSchedule, drivers);
+  let rowIdx = 0;
+  raceSchedule.forEach((_, s) => {
+    const t = times[s];
+    const isCurrent = nowMin >= t.startMin && nowMin < t.endMin;
+    rows[rowIdx]?.classList.toggle('current-row', isCurrent);
+    rowIdx++;
+    if (t.pitstopAfter) {
+      const isPit = nowMin >= t.endMin && nowMin < t.endMin + PITSTOP_MINUTES;
+      rows[rowIdx]?.classList.toggle('current-row', isPit);
+      rowIdx++;
+    }
+  });
+}, 30000);
 </script>
 </body>
 </html>
