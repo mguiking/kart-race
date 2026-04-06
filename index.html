@@ -18,7 +18,7 @@
   .legend-swatch { width: 18px; height: 18px; border-radius: 4px; }
   .legend-stints { color: #888; font-size: 0.75rem; }
 
-  .section-title { font-size: 1.1rem; margin: 20px 0 8px 0; color: #ccc; }
+  .section-title { font-size: 1.0rem; margin: 20px 0 8px 0; color: #ccc; }
 
   .timeline-container { position: relative; margin-bottom: 12px; }
   .time-axis {
@@ -135,7 +135,7 @@
 </div>
 
 <div class="section-title" style="display:flex;align-items:center;gap:12px;">
-  Strategists (2 per shift, click to assign)
+  Strategists
   <label class="strat-config">
     Shifts:
     <select id="strat-block-select">
@@ -347,13 +347,25 @@ function closeDropdown() {
   if (openDropdown) { openDropdown.remove(); openDropdown = null; }
 }
 
-function showDriverDropdown(anchorEl, currentDriverId, onSelect) {
+function showDriverDropdown(anchorEl, currentDriverId, onSelect, allowNone) {
   closeDropdown();
   const rect = anchorEl.getBoundingClientRect();
   const dd = document.createElement('div');
   dd.className = 'stint-dropdown';
   dd.style.left = rect.left + rect.width / 2 - 60 + 'px';
   dd.style.top = rect.bottom + 4 + 'px';
+  if (allowNone) {
+    const item = document.createElement('div');
+    item.className = 'stint-dropdown-item' + (currentDriverId === null ? ' active' : '');
+    item.innerHTML = `<span class="dd-swatch" style="background:#333;border:1px solid #555"></span><em>None</em>`;
+    item.addEventListener('click', (e) => {
+      e.stopPropagation();
+      onSelect(null);
+      closeDropdown();
+      renderAll();
+    });
+    dd.appendChild(item);
+  }
   drivers.forEach(d => {
     const item = document.createElement('div');
     item.className = 'stint-dropdown-item' + (currentDriverId === d.id ? ' active' : '');
@@ -436,15 +448,17 @@ function renderAll() {
     el.innerHTML = '';
     blocks.forEach((bl, b) => {
       const driverId = stratSchedule[row][b];
-      const d = drivers[driverId];
+      const d = driverId !== null ? drivers[driverId] : null;
       const widthPct = (bl.durationMin / RACE_MINUTES) * 100;
       const blk = document.createElement('div');
       blk.className = 'stint-block';
-      blk.style.cssText = `width:${widthPct}%;background:${d.color}`;
-      blk.innerHTML = `${d.name.substring(0, 3)}<span class="stint-tooltip">Strategist: ${d.name}<br>${formatMinutes(bl.startMin)} – ${formatMinutes(bl.endMin)}</span>`;
+      blk.style.cssText = `width:${widthPct}%;background:${d ? d.color : '#222'}`;
+      blk.innerHTML = d
+        ? `${d.name.substring(0, 3)}<span class="stint-tooltip">Strategist: ${d.name}<br>${formatMinutes(bl.startMin)} – ${formatMinutes(bl.endMin)}</span>`
+        : `<span style="color:#555">–</span><span class="stint-tooltip">Unassigned<br>${formatMinutes(bl.startMin)} – ${formatMinutes(bl.endMin)}</span>`;
       blk.addEventListener('click', (e) => {
         e.stopPropagation();
-        showDriverDropdown(blk, driverId, (newId) => { stratSchedule[row][b] = newId; });
+        showDriverDropdown(blk, driverId, (newId) => { stratSchedule[row][b] = newId; }, true);
       });
       el.appendChild(blk);
     });
