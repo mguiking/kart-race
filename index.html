@@ -137,23 +137,18 @@
 <div class="section-title" style="display:flex;align-items:center;gap:12px;">
   Strategists
   <label class="strat-config">
-    Shift length:
+    Day shifts:
     <select id="strat-block-select">
-      <option value="15">15 min (96 shifts)</option>
-      <option value="30">30 min (48 shifts)</option>
-      <option value="60">1 hour (24 shifts)</option>
-      <option value="103" selected>~1h 43min (14 shifts)</option>
-      <option value="69">~1h 9min (21 shifts)</option>
-      <option value="51">~51 min (28 shifts)</option>
-      <option value="206">~3h 26min (7 shifts)</option>
+      <option value="7">7 shifts (~2h 26min)</option>
+      <option value="14" selected>14 shifts (~1h 13min)</option>
+      <option value="21">21 shifts (~49min)</option>
+      <option value="28">28 shifts (~36min)</option>
     </select>
   </label>
 </div>
 <div class="timeline-container">
   <div class="time-axis" id="time-axis-strat"></div>
   <div class="timeline strategist-timeline" id="strat-timeline-1"></div>
-  <div style="height:2px"></div>
-  <div class="timeline strategist-timeline" id="strat-timeline-2"></div>
 </div>
 
 <div class="section-title">Stint Schedule</div>
@@ -176,7 +171,7 @@ const PITSTOP_MINUTES = PITSTOP_SECONDS / 60; // 1.5 min
 const NUM_PITSTOPS = TOTAL_STINTS - 1; // 38
 const TOTAL_PITSTOP_MINUTES = NUM_PITSTOPS * PITSTOP_MINUTES; // 57 min
 const DRIVING_MINUTES = RACE_MINUTES - TOTAL_PITSTOP_MINUTES; // 1383 min
-let STRATEGY_BLOCK_MINUTES = 103; // configurable shift length in minutes
+let STRATEGY_DAY_BLOCKS = 14; // number of day blocks (must be multiple of 7)
 
 const drivers = [
   { id: 0, name: "Max",     color: "#e74c3c" },
@@ -241,7 +236,7 @@ function saveState() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify({
     raceSchedule,
     stratSchedule,
-    stratBlockMinutes: STRATEGY_BLOCK_MINUTES,
+    stratDayBlocks: STRATEGY_DAY_BLOCKS,
   }));
 }
 
@@ -253,11 +248,11 @@ function loadState() {
     if (Array.isArray(state.raceSchedule) && state.raceSchedule.length === TOTAL_STINTS) {
       raceSchedule = state.raceSchedule;
     }
-    if (typeof state.stratBlockMinutes === 'number') {
-      STRATEGY_BLOCK_MINUTES = state.stratBlockMinutes;
-      document.getElementById('strat-block-select').value = String(STRATEGY_BLOCK_MINUTES);
+    if (typeof state.stratDayBlocks === 'number') {
+      STRATEGY_DAY_BLOCKS = state.stratDayBlocks;
+      document.getElementById('strat-block-select').value = String(STRATEGY_DAY_BLOCKS);
     }
-    if (Array.isArray(state.stratSchedule) && state.stratSchedule.length === 2) {
+    if (Array.isArray(state.stratSchedule) && !Array.isArray(state.stratSchedule[0])) {
       stratSchedule = state.stratSchedule;
     }
   } catch (e) { /* ignore corrupt data */ }
@@ -296,27 +291,58 @@ function computeStintTiming(raceSchedule, drivers) {
 }
 
 // ── STRATEGY BLOCKS (fixed time blocks, manually assigned) ────────────
+// Strategy blocks: day blocks (assignable) + one night block (23:00–06:00, no strategist)
+const NIGHT_START_HOUR = 23;
+const NIGHT_END_HOUR = 6;
+
+// Night period in race-minutes (race starts at RACE_START)
+const NIGHT_START_RACEMIN = ((NIGHT_START_HOUR - RACE_START + 24) % 24) * 60;
+const NIGHT_END_RACEMIN = ((NIGHT_END_HOUR - RACE_START + 24) % 24) * 60;
+// Day minutes: total race minus night
+const DAY_MINUTES = RACE_MINUTES - (NIGHT_END_RACEMIN - NIGHT_START_RACEMIN + RACE_MINUTES) % RACE_MINUTES;
+
 function buildStratBlocks() {
-  const numBlocks = Math.ceil(RACE_MINUTES / STRATEGY_BLOCK_MINUTES);
   const blocks = [];
-  for (let i = 0; i < numBlocks; i++) {
-    const startMin = Math.round((i / numBlocks) * RACE_MINUTES);
-    const endMin = Math.round(((i + 1) / numBlocks) * RACE_MINUTES);
-    blocks.push({ startMin, endMin, durationMin: endMin - startMin });
+  // Day period 1: race start to night start (12:00–23:00 = 660 min)
+  const day1Min = NIGHT_START_RACEMIN; // minutes from race start to night
+  const day2Min = RACE_MINUTES - NIGHT_END_RACEMIN; // minutes from night end to race end
+
+  // Split day blocks proportionally between day period 1 and 2
+  const day1Blocks = Math.round(STRATEGY_DAY_BLOCKS * (day1Min / (day1Min + day2Min)));
+  const day2Blocks = STRATEGY_DAY_BLOCKS - day1Blocks;
+
+  // Day period 1 blocks
+  for (let i = 0; i < day1Blocks; i++) {
+    const startMin = Math.round((i / day1Blocks) * day1Min);
+    const endMin = Math.round(((i + 1) / day1Blocks) * day1Min);
+    blocks.push({ startMin, endMin, durationMin: endMin - startMin, isNight: false });
   }
+
+  // Night block
+  blocks.push({
+    startMin: NIGHT_START_RACEMIN,
+    endMin: NIGHT_END_RACEMIN,
+    durationMin: NIGHT_END_RACEMIN - NIGHT_START_RACEMIN,
+    isNight: true
+  });
+
+  // Day period 2 blocks
+  for (let i = 0; i < day2Blocks; i++) {
+    const startMin = NIGHT_END_RACEMIN + Math.round((i / day2Blocks) * day2Min);
+    const endMin = NIGHT_END_RACEMIN + Math.round(((i + 1) / day2Blocks) * day2Min);
+    blocks.push({ startMin, endMin, durationMin: endMin - startMin, isNight: false });
+  }
+
   return blocks;
 }
 
-// stratSchedule[row][blockIndex] = driverId — manually editable
-// row 0 = strategist 1, row 1 = strategist 2
-const defaultStratSchedule = [
-  [5, 3, 4, 0, 6, 2, 5, 0, 1, 5, 2, 0],
-  [6, 2, 1, 4, 3, 6, 3, 1, 2, 0, 4, 5],
-];
-let stratSchedule = defaultStratSchedule.map(r => [...r]);
+// stratSchedule[blockIndex] = driverId or null — manually editable
+const defaultStratSchedule = [5, 3, 4, 0, 6, 2, 5, 0, 1, 5, 2, 0];
+let stratSchedule = [...defaultStratSchedule];
 
 function initStratSchedule() {
-  stratSchedule = defaultStratSchedule.map(r => [...r]);
+  const blocks = buildStratBlocks();
+  stratSchedule = blocks.map((bl, i) => bl.isNight ? null : (i % drivers.length));
 }
 
 // ── RENDERING ──────────────────────────────────────────────────────────
@@ -395,12 +421,11 @@ function renderAll() {
   const blocks = buildStratBlocks();
 
   // Ensure stratSchedule has the right number of blocks (in case block size changed)
-  for (let row = 0; row < 2; row++) {
-    while (stratSchedule[row].length < blocks.length) {
-      stratSchedule[row].push((stratSchedule[row].length + row) % drivers.length);
-    }
-    stratSchedule[row].length = blocks.length;
+  while (stratSchedule.length < blocks.length) {
+    const bl = blocks[stratSchedule.length];
+    stratSchedule.push(bl.isNight ? null : (stratSchedule.length % drivers.length));
   }
+  stratSchedule.length = blocks.length;
 
   // Legend — show stint count and per-stint duration
   const legend = document.getElementById('legend');
@@ -446,26 +471,30 @@ function renderAll() {
     }
   });
 
-  // Strategist timelines — fixed blocks, clickable
-  [0, 1].forEach(row => {
-    const el = document.getElementById(`strat-timeline-${row + 1}`);
-    el.innerHTML = '';
-    blocks.forEach((bl, b) => {
-      const driverId = stratSchedule[row][b];
-      const d = driverId !== null ? drivers[driverId] : null;
-      const widthPct = (bl.durationMin / RACE_MINUTES) * 100;
-      const blk = document.createElement('div');
-      blk.className = 'stint-block';
+  // Strategist timeline — single row, fixed blocks, clickable
+  const stratEl = document.getElementById('strat-timeline-1');
+  stratEl.innerHTML = '';
+  blocks.forEach((bl, b) => {
+    const night = bl.isNight;
+    const driverId = stratSchedule[b];
+    const d = driverId !== null ? drivers[driverId] : null;
+    const widthPct = (bl.durationMin / RACE_MINUTES) * 100;
+    const blk = document.createElement('div');
+    blk.className = 'stint-block';
+    if (night) {
+      blk.style.cssText = `width:${widthPct}%;background:#111;cursor:default`;
+      blk.innerHTML = `<span style="color:#444;font-size:0.5rem">zzz</span><span class="stint-tooltip">Night (no strategist)<br>${formatMinutes(bl.startMin)} – ${formatMinutes(bl.endMin)}</span>`;
+    } else {
       blk.style.cssText = `width:${widthPct}%;background:${d ? d.color : '#222'}`;
       blk.innerHTML = d
         ? `${d.name.substring(0, 3)}<span class="stint-tooltip">Strategist: ${d.name}<br>${formatMinutes(bl.startMin)} – ${formatMinutes(bl.endMin)}</span>`
         : `<span style="color:#555">–</span><span class="stint-tooltip">Unassigned<br>${formatMinutes(bl.startMin)} – ${formatMinutes(bl.endMin)}</span>`;
       blk.addEventListener('click', (e) => {
         e.stopPropagation();
-        showDriverDropdown(blk, driverId, (newId) => { stratSchedule[row][b] = newId; }, true);
+        showDriverDropdown(blk, driverId, (newId) => { stratSchedule[b] = newId; }, true);
       });
-      el.appendChild(blk);
-    });
+    }
+    stratEl.appendChild(blk);
   });
 
   // Stint table — highlight current row
@@ -510,7 +539,7 @@ function renderAll() {
     // Strategy time from blocks (excluding overlap with racing)
     let stratMin = 0, stratBlockCount = 0;
     blocks.forEach((bl, b) => {
-      if (stratSchedule[0][b] !== i && stratSchedule[1][b] !== i) return;
+      if (stratSchedule[b] !== i) return;
       stratBlockCount++;
       // Subtract any racing time that overlaps with this strategy block
       let racingOverlap = 0;
@@ -542,7 +571,7 @@ function renderAll() {
 
 // Re-init strategy schedule when block size changes
 document.getElementById('strat-block-select').addEventListener('change', (e) => {
-  STRATEGY_BLOCK_MINUTES = parseInt(e.target.value);
+  STRATEGY_DAY_BLOCKS = parseInt(e.target.value);
   initStratSchedule();
   renderAll();
 });
