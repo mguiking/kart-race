@@ -13,10 +13,19 @@
   .legend { display: flex; justify-content: center; gap: 16px; flex-wrap: wrap; margin-bottom: 32px; }
   .legend-item {
     display: flex; align-items: center; gap: 6px;
-    background: #16213e; padding: 6px 14px; border-radius: 6px; font-size: 0.85rem;
+    padding: 6px 14px; border-radius: 6px; font-size: 0.85rem;
+    border: 2px solid transparent;
   }
+  .legend-item.team-purple { background: #2a1a3e; border-color: #9b59b6; }
+  .legend-item.team-white { background: #2a2a2e; border-color: #e0e0e0; }
   .legend-swatch { width: 18px; height: 18px; border-radius: 4px; }
   .legend-stints { color: #888; font-size: 0.75rem; }
+  .legend-team-label {
+    font-size: 0.65rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;
+    padding: 1px 6px; border-radius: 3px;
+  }
+  .team-purple .legend-team-label { background: #9b59b6; color: #fff; }
+  .team-white .legend-team-label { background: #e0e0e0; color: #000; }
 
   .section-title { font-size: 1.0rem; margin: 20px 0 8px 0; color: #ccc; }
 
@@ -101,14 +110,6 @@
   .bar-container { height: 6px; background: #0a0a1a; border-radius: 3px; margin-top: 4px; }
   .bar-fill { height: 100%; border-radius: 3px; }
 
-  .strat-config {
-    font-size: 0.8rem; color: #888; font-weight: 400; display: flex; align-items: center; gap: 6px;
-  }
-  .strat-config select {
-    background: #16213e; color: #e0e0e0; border: 1px solid #444; border-radius: 4px;
-    padding: 3px 8px; font-size: 0.8rem; cursor: pointer;
-  }
-
   .stint-table {
     width: 100%; max-width: 1000px; border-collapse: collapse; margin-top: 8px; font-size: 0.85rem;
   }
@@ -125,6 +126,9 @@
     50% { background: rgba(255, 255, 255, 0.18); }
   }
   .stint-table tr:hover td { background: #16213e; }
+  .stint-table .shift-cell { width: 10px; padding: 0; }
+  .stint-table tr.current-row td.shift-cell { animation: none; }
+  .stint-table tr:hover td.shift-cell { background: revert; }
   .stint-table .driver-cell { display: flex; align-items: center; gap: 8px; }
   .stint-table .table-swatch { width: 10px; height: 10px; border-radius: 3px; flex-shrink: 0; }
 </style>
@@ -136,36 +140,16 @@
 
 <div class="legend" id="legend"></div>
 
-<div class="section-title">Racing</div>
-<div class="timeline-container" id="race-container">
+<div class="timeline-container" id="race-strat-container">
   <div class="time-axis" id="time-axis-race"></div>
   <div class="timeline" id="race-timeline"></div>
+  <div class="timeline strategist-timeline" id="strat-timeline" style="margin-top:2px"></div>
   <div class="time-crosshair" id="crosshair-race"></div>
-</div>
-
-<div class="section-title" style="display:flex;align-items:center;gap:12px;">
-  Strategists
-  <label class="strat-config">
-    Primary shifts:
-    <select id="strat-block-select">
-      <option value="7">7 shifts (~2h 26min)</option>
-      <option value="14" selected>14 shifts (~1h 13min)</option>
-      <option value="21">21 shifts (~49min)</option>
-      <option value="28">28 shifts (~36min)</option>
-    </select>
-  </label>
-</div>
-<div class="timeline-container" id="strat-container">
-  <div class="time-axis" id="time-axis-strat"></div>
-  <div class="timeline strategist-timeline" id="strat-timeline-1"></div>
-  <div style="height:2px"></div>
-  <div class="timeline strategist-timeline" id="strat-timeline-2"></div>
-  <div class="time-crosshair" id="crosshair-strat"></div>
 </div>
 
 <div class="section-title">Stint Schedule</div>
 <table class="stint-table" id="stint-table">
-  <thead><tr><th>#</th><th>Start</th><th>End</th><th>Duration</th><th>Driver</th></tr></thead>
+  <thead><tr><th style="width:6px;padding:0"></th><th>#</th><th>Start</th><th>End</th><th>Duration</th><th>Driver</th></tr></thead>
   <tbody></tbody>
 </table>
 
@@ -183,61 +167,73 @@ const PITSTOP_MINUTES = PITSTOP_SECONDS / 60; // 1.5 min
 const NUM_PITSTOPS = TOTAL_STINTS - 1; // 38
 const TOTAL_PITSTOP_MINUTES = NUM_PITSTOPS * PITSTOP_MINUTES; // 57 min
 const DRIVING_MINUTES = RACE_MINUTES - TOTAL_PITSTOP_MINUTES; // 1383 min
-let STRATEGY_DAY_BLOCKS = 14; // number of day blocks (must be multiple of 7)
+const STRATEGY_SHIFTS = [7, 9, 8, 8, 7]; // stints per shift
+const SHIFT_TEAMS = ['purple', 'white', 'purple', 'white', 'purple'];
+const TEAM_COLORS = { purple: '#9b59b6', white: '#e0e0e0' };
 
 const drivers = [
   { id: 0, name: "Max",     color: "#e74c3c" },
   { id: 1, name: "Remy",   color: "#d1b735" },
   { id: 2, name: "Boris",    color: "#2ecc71" },
-  { id: 3, name: "Remco",    color: "#3d31f8" },
+  { id: 3, name: "Remco",    color: "#3383d3" },
   { id: 4, name: "Roel",   color: "#c57028" },
-  { id: 5, name: "Bouw",     color: "#cf4cc1" },
+  { id: 5, name: "Bouw",     color: "#ff9cf5" },
   { id: 6, name: "Jesper",    color: "#6c646e" },
+];
+
+let driverTeams = [
+  "purple",
+  "purple",
+  "white",
+  "white",
+  "purple",
+  "white",
+  "purple"
 ];
 
 // ── STINT ASSIGNMENT (default, overridden by localStorage) ─────────────
 // Driver ID for each of the 39 stints. 3 drivers do 5 stints, 4 do 6.
 // 3×5 + 4×6 = 39 ✓
 const defaultRaceSchedule = [
-  1, // stint 0
+  1,
   0,
   4,
-  0,
+  6,
   1,
-  6,
   0,
-  6,
-  3,
-  6,
+  4,
+  2,
+  5,
   3,
   2,
   5,
+  3,
   2,
   5,
+  3,
+  6,
+  1,
   0,
-  5,
-  0,
-  1,
-  4,
-  1,
-  4,
-  1,
   4,
   6,
-  2,
-  6,
-  2,
-  6,
-  2,
-  3,
-  2,
-  3,
-  0,
-  3,
-  5,
   1,
+  0,
+  4,
+  2,
   5,
-  4
+  3,
+  2,
+  5,
+  3,
+  2,
+  5,
+  6,
+  1,
+  0,
+  4,
+  6,
+  1,
+  0
 ]
 let raceSchedule = [...defaultRaceSchedule];
 
@@ -247,8 +243,7 @@ const STORAGE_KEY = 'kartRacePlanner';
 function saveState() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify({
     raceSchedule,
-    stratSchedule,
-    stratDayBlocks: STRATEGY_DAY_BLOCKS,
+    driverTeams,
   }));
 }
 
@@ -260,12 +255,8 @@ function loadState() {
     if (Array.isArray(state.raceSchedule) && state.raceSchedule.length === TOTAL_STINTS) {
       raceSchedule = state.raceSchedule;
     }
-    if (typeof state.stratDayBlocks === 'number') {
-      STRATEGY_DAY_BLOCKS = state.stratDayBlocks;
-      document.getElementById('strat-block-select').value = String(STRATEGY_DAY_BLOCKS);
-    }
-    if (Array.isArray(state.stratSchedule) && !Array.isArray(state.stratSchedule[0])) {
-      stratSchedule = state.stratSchedule;
+    if (Array.isArray(state.driverTeams) && state.driverTeams.length === drivers.length) {
+      driverTeams = state.driverTeams;
     }
   } catch (e) { /* ignore corrupt data */ }
 }
@@ -302,45 +293,22 @@ function computeStintTiming(raceSchedule, drivers) {
   return { times, driverStintDuration, stintCounts };
 }
 
-// ── PRIMARY STRATEGY BLOCKS (fixed time blocks, manually assigned) ────
-function buildStratBlocks() {
-  const numBlocks = STRATEGY_DAY_BLOCKS;
-  const blocks = [];
-  for (let i = 0; i < numBlocks; i++) {
-    const startMin = Math.round((i / numBlocks) * RACE_MINUTES);
-    const endMin = Math.round(((i + 1) / numBlocks) * RACE_MINUTES);
-    blocks.push({ startMin, endMin, durationMin: endMin - startMin });
-  }
-  return blocks;
-}
-
-// stratSchedule[blockIndex] = driverId or null — manually editable
-const defaultStratSchedule = [
-  6,
-  3,
-  5,
-  1,
-  0,
-  4,
-  2,
-  6,
-  5,
-  3,
-  0,
-  1,
-  4,
-  2
-]
-let stratSchedule = [...defaultStratSchedule];
-
-function initStratSchedule() {
-  const blocks = buildStratBlocks();
-  stratSchedule = blocks.map((_, i) => i % drivers.length);
-}
-
-// ── SECONDARY STRATEGIST (auto: driver who just finished previous stint)
-function buildSecondaryStrat(raceSchedule, times) {
-  return raceSchedule.map((_, s) => s > 0 ? raceSchedule[s - 1] : null);
+// ── STRATEGY SHIFTS (fixed groupings of stints) ─────────────────────
+function buildStrategyShifts(times) {
+  const shifts = [];
+  let stintIdx = 0;
+  STRATEGY_SHIFTS.forEach((count, i) => {
+    const firstStint = stintIdx;
+    const lastStint = stintIdx + count - 1;
+    const startMin = times[firstStint].startMin;
+    const endMin = i < STRATEGY_SHIFTS.length - 1
+      ? times[lastStint + 1].startMin
+      : RACE_MINUTES;
+    const driverIds = [...new Set(raceSchedule.slice(firstStint, lastStint + 1))];
+    shifts.push({ firstStint, lastStint, startMin, endMin, durationMin: endMin - startMin, stintCount: count, driverIds });
+    stintIdx += count;
+  });
+  return shifts;
 }
 
 // ── RENDERING ──────────────────────────────────────────────────────────
@@ -376,7 +344,6 @@ function updateCrosshairs() {
   const nowMin = ((now.getHours() * 60 + now.getMinutes() + now.getSeconds() / 60) - RACE_START * 60 + RACE_MINUTES) % RACE_MINUTES;
   const pct = (nowMin / RACE_MINUTES) * 100;
   document.getElementById('crosshair-race').style.left = pct + '%';
-  document.getElementById('crosshair-strat').style.left = pct + '%';
 }
 
 function closeDropdown() {
@@ -424,32 +391,31 @@ document.addEventListener('click', (e) => {
 
 function renderAll() {
   const { times, driverStintDuration, stintCounts } = computeStintTiming(raceSchedule, drivers);
-  const blocks = buildStratBlocks();
+  const shifts = buildStrategyShifts(times);
 
-  // Ensure stratSchedule has the right number of blocks (in case block size changed)
-  while (stratSchedule.length < blocks.length) {
-    stratSchedule.push(stratSchedule.length % drivers.length);
-  }
-  stratSchedule.length = blocks.length;
-
-  const secondaryStrat = buildSecondaryStrat(raceSchedule, times);
-
-  // Legend — show stint count and per-stint duration
+  // Legend — show stint count, per-stint duration, and team
   const legend = document.getElementById('legend');
   legend.innerHTML = '';
   drivers.forEach((d, i) => {
     const count = stintCounts[i];
     const durMin = count > 0 ? Math.round(driverStintDuration[i]) : 0;
-    legend.innerHTML += `
-      <div class="legend-item">
-        <div class="legend-swatch" style="background:${d.color}"></div>
-        ${d.name} <span class="legend-stints">(${count} &times; ${durMin} min)</span>
-      </div>`;
+    const team = driverTeams[i];
+    const item = document.createElement('div');
+    item.className = `legend-item team-${team}`;
+    item.innerHTML = `
+      <div class="legend-swatch" style="background:${d.color}"></div>
+      ${d.name} <span class="legend-stints">(${count} &times; ${durMin} min)</span>
+      <span class="legend-team-label">${team}</span>`;
+    item.addEventListener('dblclick', (e) => {
+      e.stopPropagation();
+      driverTeams[i] = driverTeams[i] === 'purple' ? 'white' : 'purple';
+      renderAll();
+    });
+    legend.appendChild(item);
   });
 
-  // Time axes
+  // Time axis
   renderTimeAxis('time-axis-race');
-  renderTimeAxis('time-axis-strat');
 
   // Race timeline — variable width per stint with pitstops
   const raceTL = document.getElementById('race-timeline');
@@ -478,52 +444,31 @@ function renderAll() {
     }
   });
 
-  // Primary strategist timeline — fixed blocks, clickable
-  const stratEl = document.getElementById('strat-timeline-1');
+  // Strategy shifts timeline
+  const stratEl = document.getElementById('strat-timeline');
   stratEl.innerHTML = '';
-  blocks.forEach((bl, b) => {
-    const driverId = stratSchedule[b];
-    const d = driverId !== null ? drivers[driverId] : null;
-    const widthPct = (bl.durationMin / RACE_MINUTES) * 100;
+  shifts.forEach((shift, i) => {
+    const widthPct = (shift.durationMin / RACE_MINUTES) * 100;
+    const team = SHIFT_TEAMS[i];
+    const teamColor = TEAM_COLORS[team];
+    const textColor = team === 'white' ? '#000' : '#fff';
+    const driverNames = shift.driverIds.map(id => drivers[id].name).join(', ');
     const blk = document.createElement('div');
     blk.className = 'stint-block';
-    blk.style.cssText = `width:${widthPct}%;background:${d ? d.color : '#222'}`;
-    blk.innerHTML = d
-      ? `${d.name.substring(0, 3)}<span class="stint-tooltip">Primary: ${d.name}<br>${formatMinutes(bl.startMin)} – ${formatMinutes(bl.endMin)}</span>`
-      : `<span style="color:#555">–</span><span class="stint-tooltip">Unassigned<br>${formatMinutes(bl.startMin)} – ${formatMinutes(bl.endMin)}</span>`;
-    blk.addEventListener('click', (e) => {
-      e.stopPropagation();
-      showDriverDropdown(blk, driverId, (newId) => { stratSchedule[b] = newId; }, true);
-    });
+    blk.style.cssText = `width:${widthPct}%;background:${teamColor};color:${textColor};cursor:default`;
+    blk.innerHTML = `Strategy shift ${i + 1}<span class="stint-tooltip">Shift ${i + 1} — Team ${team} (${shift.stintCount} stints)<br>${formatMinutes(shift.startMin)} – ${formatMinutes(shift.endMin)}<br>Drivers: ${driverNames}</span>`;
     stratEl.appendChild(blk);
-  });
-
-  // Secondary strategist timeline — auto: previous stint's driver
-  const secEl = document.getElementById('strat-timeline-2');
-  secEl.innerHTML = '';
-  raceSchedule.forEach((_, stint) => {
-    const driverId = secondaryStrat[stint];
-    const d = driverId !== null ? drivers[driverId] : null;
-    const t = times[stint];
-    const widthPct = (t.durationMin / RACE_MINUTES) * 100;
-    const blk = document.createElement('div');
-    blk.className = 'stint-block';
-    blk.style.cssText = `width:${widthPct}%;background:${d ? d.color : '#222'};cursor:default`;
-    blk.innerHTML = d
-      ? `${d.name.substring(0, 3)}<span class="stint-tooltip">Secondary: ${d.name} (prev driver)<br>${formatMinutes(t.startMin)} – ${formatMinutes(t.endMin)}</span>`
-      : `<span style="color:#555">–</span><span class="stint-tooltip">No previous driver<br>${formatMinutes(t.startMin)} – ${formatMinutes(t.endMin)}</span>`;
-    secEl.appendChild(blk);
-    if (t.pitstopAfter) {
-      const pit = document.createElement('div');
-      pit.className = 'pitstop-block';
-      pit.style.cssText = `width:${pitWidthPct}%`;
-      secEl.appendChild(pit);
-    }
   });
 
   // Stint table — highlight current row
   const now = new Date();
   const nowMin = ((now.getHours() * 60 + now.getMinutes()) - RACE_START * 60 + RACE_MINUTES) % RACE_MINUTES;
+
+  // Build stint-to-shift lookup
+  const stintShift = [];
+  shifts.forEach((shift, i) => {
+    for (let j = shift.firstStint; j <= shift.lastStint; j++) stintShift[j] = i;
+  });
 
   const tbody = document.querySelector('#stint-table tbody');
   tbody.innerHTML = '';
@@ -533,7 +478,9 @@ function renderAll() {
     const isCurrent = nowMin >= t.startMin && nowMin < t.endMin;
     const pitEnd = t.endMin + PITSTOP_MINUTES;
     const isPitCurrent = t.pitstopAfter && nowMin >= t.endMin && nowMin < pitEnd;
+    const teamColor = TEAM_COLORS[SHIFT_TEAMS[stintShift[s]]];
     tbody.innerHTML += `<tr${isCurrent ? ' class="current-row"' : ''}>
+      <td class="shift-cell" style="background:${teamColor}"></td>
       <td>${s + 1}</td>
       <td>${formatHMS(t.startMin)}</td>
       <td>${formatHMS(t.endMin)}</td>
@@ -542,6 +489,7 @@ function renderAll() {
     </tr>`;
     if (t.pitstopAfter) {
       tbody.innerHTML += `<tr style="color:darkgray;font-size:0.75rem"${isPitCurrent ? ' class="current-row"' : ''}>
+        <td class="shift-cell" style="background:${teamColor}"></td>
         <td>Pit ${s+1}</td>
         <td>${formatHMS(t.endMin)}</td>
         <td>${formatHMS(pitEnd)}</td>
@@ -559,39 +507,12 @@ function renderAll() {
     const raceStintCount = stintCounts[i];
     const raceMin = times.reduce((sum, t, s) => raceSchedule[s] === i ? sum + t.durationMin : sum, 0);
     const durMin = raceStintCount > 0 ? Math.round(driverStintDuration[i]) : 0;
-
-    // Primary strategy time from blocks (excluding overlap with racing)
-    let primaryMin = 0, primaryCount = 0;
-    blocks.forEach((bl, b) => {
-      if (stratSchedule[b] !== i) return;
-      primaryCount++;
-      let racingOverlap = 0;
-      times.forEach((t, s) => {
-        if (raceSchedule[s] !== i) return;
-        const overlapStart = Math.max(bl.startMin, t.startMin);
-        const overlapEnd = Math.min(bl.endMin, t.endMin);
-        if (overlapEnd > overlapStart) racingOverlap += overlapEnd - overlapStart;
-      });
-      primaryMin += bl.durationMin - racingOverlap;
-    });
-
-    // Secondary strategy time (stint-aligned, excluding overlap with racing & primary)
-    let secondaryMin = 0, secondaryCount = 0;
-    times.forEach((t, s) => {
-      if (secondaryStrat[s] !== i) return;
-      if (raceSchedule[s] === i) return; // racing this stint, skip
-      secondaryCount++;
-      secondaryMin += t.durationMin;
-    });
-
-    const stratMin = primaryMin + secondaryMin;
-    const restMin = RACE_MINUTES - raceMin - stratMin;
+    const restMin = RACE_MINUTES - raceMin;
 
     grid.innerHTML += `
       <div class="driver-card" style="border-color:${d.color}">
         <h3 style="color:${d.color}">${d.name}</h3>
         <div class="stat">Racing: <span>${raceStintCount} stints × ${durMin} min = ${fmtHrs(raceMin)}h</span></div>
-        <div class="stat">Strategy: <span>${fmtHrs(stratMin)}h (${primaryCount} primary + ${secondaryCount} secondary)</span></div>
         <div class="stat">Rest: <span>${fmtHrs(restMin)}h</span></div>
         <div class="bar-container">
           <div class="bar-fill" style="width:${(raceMin/RACE_MINUTES)*100}%;background:${d.color}"></div>
@@ -602,13 +523,6 @@ function renderAll() {
   updateCrosshairs();
   saveState();
 }
-
-// Re-init strategy schedule when block size changes
-document.getElementById('strat-block-select').addEventListener('change', (e) => {
-  STRATEGY_DAY_BLOCKS = parseInt(e.target.value);
-  initStratSchedule();
-  renderAll();
-});
 
 loadState();
 renderAll();
