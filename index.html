@@ -286,7 +286,7 @@ function computeStintTiming(raceSchedule, drivers) {
     const startMin = Math.round(startExact);
     const endMin = Math.round(cumulativeExact);
     const hasPitstop = i < raceSchedule.length - 1;
-    times.push({ startMin, endMin, durationMin: endMin - startMin, pitstopAfter: hasPitstop });
+    times.push({ startMin, endMin, startExact, endExact: cumulativeExact, durationMin: endMin - startMin, pitstopAfter: hasPitstop });
     if (hasPitstop) cumulativeExact += PITSTOP_MINUTES;
   });
 
@@ -479,11 +479,12 @@ function renderAll() {
     const pitEnd = t.endMin + PITSTOP_MINUTES;
     const isPitCurrent = t.pitstopAfter && nowMin >= t.endMin && nowMin < pitEnd;
     const teamColor = TEAM_COLORS[SHIFT_TEAMS[stintShift[s]]];
+    const pitEndExact = t.endExact + PITSTOP_MINUTES;
     tbody.innerHTML += `<tr${isCurrent ? ' class="current-row"' : ''}>
       <td class="shift-cell" style="background:${teamColor}"></td>
       <td>${s + 1}</td>
-      <td>${formatHMS(t.startMin)}</td>
-      <td>${formatHMS(t.endMin)}</td>
+      <td>${formatHMS(t.startExact)}</td>
+      <td>${formatHMS(t.endExact)}</td>
       <td>${t.durationMin} min</td>
       <td><div class="driver-cell"><span class="table-swatch" style="background:${d.color}"></span>${d.name}</div></td>
     </tr>`;
@@ -491,8 +492,8 @@ function renderAll() {
       tbody.innerHTML += `<tr style="color:darkgray;font-size:0.75rem"${isPitCurrent ? ' class="current-row"' : ''}>
         <td class="shift-cell" style="background:${teamColor}"></td>
         <td>Pit ${s+1}</td>
-        <td>${formatHMS(t.endMin)}</td>
-        <td>${formatHMS(pitEnd)}</td>
+        <td>${formatHMS(t.endExact)}</td>
+        <td>${formatHMS(pitEndExact)}</td>
         <td>${PITSTOP_SECONDS}s</td>
         <td></td>
       </tr>`;
