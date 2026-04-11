@@ -161,7 +161,7 @@
 const TOTAL_STINTS = 39;
 const RACE_HOURS = 24;
 const RACE_MINUTES = RACE_HOURS * 60;
-const RACE_START = 12.3;
+const RACE_START = 12 + 20/60; // 12:20
 const PITSTOP_SECONDS = 90;
 const PITSTOP_MINUTES = PITSTOP_SECONDS / 60; // 1.5 min
 const NUM_PITSTOPS = TOTAL_STINTS - 1; // 38
@@ -340,10 +340,14 @@ function formatRemaining(remainingMin) {
 function renderTimeAxis(containerId) {
   const el = document.getElementById(containerId);
   el.innerHTML = '';
-  for (let h = 0; h <= 24; h += 1) {
-    const pct = (h / 24) * 100;
-    const clockH = (RACE_START + h) % 24;
-    el.innerHTML += `<span class="time-mark" style="left:${pct}%">${String(clockH).padStart(2,'0')}:00</span>`;
+  const startMin = RACE_START * 60; // race start in minutes from midnight
+  const firstWholeHour = Math.ceil(RACE_START); // first whole clock hour at or after start
+  for (let clockH = firstWholeHour; clockH <= firstWholeHour + 24; clockH++) {
+    const raceMin = (clockH * 60) - startMin; // minutes into the race
+    if (raceMin < 0 || raceMin > RACE_MINUTES) continue;
+    const pct = (raceMin / RACE_MINUTES) * 100;
+    const label = clockH % 24;
+    el.innerHTML += `<span class="time-mark" style="left:${pct}%">${String(label).padStart(2,'0')}:00</span>`;
   }
 }
 
