@@ -149,7 +149,7 @@
 
 <div class="section-title">Stint Schedule</div>
 <table class="stint-table" id="stint-table">
-  <thead><tr><th style="width:6px;padding:0"></th><th>#</th><th>Start</th><th>End</th><th>Duration</th><th>Driver</th></tr></thead>
+  <thead><tr><th style="width:6px;padding:0"></th><th>#</th><th>Start</th><th>End</th><th>Duration</th><th>Remaining Start</th><th>Remaining End</th><th>Driver</th></tr></thead>
   <tbody></tbody>
 </table>
 
@@ -161,7 +161,7 @@
 const TOTAL_STINTS = 39;
 const RACE_HOURS = 24;
 const RACE_MINUTES = RACE_HOURS * 60;
-const RACE_START = 12;
+const RACE_START = 12.3;
 const PITSTOP_SECONDS = 90;
 const PITSTOP_MINUTES = PITSTOP_SECONDS / 60; // 1.5 min
 const NUM_PITSTOPS = TOTAL_STINTS - 1; // 38
@@ -172,12 +172,12 @@ const SHIFT_TEAMS = ['purple', 'white', 'purple', 'white', 'purple'];
 const TEAM_COLORS = { purple: '#9b59b6', white: '#e0e0e0' };
 
 const drivers = [
-  { id: 0, name: "Max",     color: "#e74c3c" },
+  { id: 0, name: "Bouw",     color: "#e74c3c" },
   { id: 1, name: "Remy",   color: "#d1b735" },
   { id: 2, name: "Boris",    color: "#2ecc71" },
   { id: 3, name: "Remco",    color: "#3383d3" },
   { id: 4, name: "Roel",   color: "#c57028" },
-  { id: 5, name: "Bouw",     color: "#ff9cf5" },
+  { id: 5, name: "Max",     color: "#ff9cf5" },
   { id: 6, name: "Jesper",    color: "#6c646e" },
 ];
 
@@ -324,6 +324,14 @@ function formatMinutes(raceMin) {
 function formatHMS(raceMin) {
   const totalSec = Math.round((RACE_START * 60 + raceMin) * 60);
   const h = Math.floor(totalSec / 3600) % 24;
+  const m = Math.floor((totalSec % 3600) / 60);
+  const s = totalSec % 60;
+  return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+}
+
+function formatRemaining(remainingMin) {
+  const totalSec = Math.max(0, Math.round(remainingMin * 60));
+  const h = Math.floor(totalSec / 3600);
   const m = Math.floor((totalSec % 3600) / 60);
   const s = totalSec % 60;
   return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
@@ -480,21 +488,29 @@ function renderAll() {
     const isPitCurrent = t.pitstopAfter && nowMin >= t.endMin && nowMin < pitEnd;
     const teamColor = TEAM_COLORS[SHIFT_TEAMS[stintShift[s]]];
     const pitEndExact = t.endExact + PITSTOP_MINUTES;
+    const remainingStart = RACE_MINUTES - t.startExact;
+    const remainingEnd = RACE_MINUTES - t.endExact;
     tbody.innerHTML += `<tr${isCurrent ? ' class="current-row"' : ''}>
       <td class="shift-cell" style="background:${teamColor}"></td>
       <td>${s + 1}</td>
       <td>${formatHMS(t.startExact)}</td>
       <td>${formatHMS(t.endExact)}</td>
       <td>${t.durationMin} min</td>
+      <td>${formatRemaining(remainingStart)}</td>
+      <td>${formatRemaining(remainingEnd)}</td>
       <td><div class="driver-cell"><span class="table-swatch" style="background:${d.color}"></span>${d.name}</div></td>
     </tr>`;
     if (t.pitstopAfter) {
+      const pitRemainingStart = RACE_MINUTES - t.endExact;
+      const pitRemainingEnd = RACE_MINUTES - pitEndExact;
       tbody.innerHTML += `<tr style="color:darkgray;font-size:0.75rem"${isPitCurrent ? ' class="current-row"' : ''}>
         <td class="shift-cell" style="background:${teamColor}"></td>
         <td>Pit ${s+1}</td>
         <td>${formatHMS(t.endExact)}</td>
         <td>${formatHMS(pitEndExact)}</td>
         <td>${PITSTOP_SECONDS}s</td>
+        <td>${formatRemaining(pitRemainingStart)}</td>
+        <td>${formatRemaining(pitRemainingEnd)}</td>
         <td></td>
       </tr>`;
     }
