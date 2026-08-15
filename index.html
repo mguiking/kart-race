@@ -291,14 +291,15 @@ function formatRemaining(remainingMin) {
 function renderTimeAxis(containerId) {
   const el = document.getElementById(containerId);
   el.innerHTML = '';
-  const startMin = RACE_START * 60; // race start in minutes from midnight
-  const firstWholeHour = Math.ceil(RACE_START); // first whole clock hour at or after start
-  for (let clockH = firstWholeHour; clockH <= firstWholeHour + 24; clockH++) {
-    const raceMin = (clockH * 60) - startMin; // minutes into the race
-    if (raceMin < 0 || raceMin > RACE_MINUTES) continue;
+  const startMinOfDay = RACE_START * 60; // race start in minutes from midnight
+  const step = 20; // minutes between labels
+  for (let raceMin = 0; raceMin <= RACE_MINUTES; raceMin += step) {
     const pct = (raceMin / RACE_MINUTES) * 100;
-    const label = clockH % 24;
-    el.innerHTML += `<span class="time-mark" style="left:${pct}%">${String(label).padStart(2,'0')}:00</span>`;
+    const absMin = Math.floor(startMinOfDay + raceMin);
+    const h = Math.floor(absMin / 60) % 24;
+    const m = Math.floor(absMin % 60);
+    const label = `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`;
+    el.innerHTML += `<span class="time-mark" style="left:${pct}%">${label}</span>`;
   }
 }
 
