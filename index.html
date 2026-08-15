@@ -358,25 +358,25 @@ function renderAll() {
   const shifts = buildStrategyShifts(times);
 
   // Legend — show stint count, per-stint duration, and team
-  const legend = document.getElementById('legend');
-  legend.innerHTML = '';
-  drivers.forEach((d, i) => {
-    const count = stintCounts[i];
-    const durMin = count > 0 ? Math.round(driverStintDuration[i]) : 0;
-    const team = driverTeams[i];
-    const item = document.createElement('div');
-    item.className = `legend-item team-${team}`;
-    item.innerHTML = `
-      <div class="legend-swatch" style="background:${d.color}"></div>
-      ${d.name} <span class="legend-stints">(${count} &times; ${durMin} min)</span>
-      <span class="legend-team-label">${team}</span>`;
-    item.addEventListener('dblclick', (e) => {
-      e.stopPropagation();
-      driverTeams[i] = driverTeams[i] === 'purple' ? 'white' : 'purple';
-      renderAll();
-    });
-    legend.appendChild(item);
-  });
+  // const legend = document.getElementById('legend');
+  // legend.innerHTML = '';
+  // drivers.forEach((d, i) => {
+  //   const count = stintCounts[i];
+  //   const durMin = count > 0 ? Math.round(driverStintDuration[i]) : 0;
+  //   const team = driverTeams[i];
+  //   const item = document.createElement('div');
+  //   item.className = `legend-item team-${team}`;
+  //   item.innerHTML = `
+  //     <div class="legend-swatch" style="background:${d.color}"></div>
+  //     ${d.name} <span class="legend-stints">(${count} &times; ${durMin} min)</span>
+  //     <span class="legend-team-label">${team}</span>`;
+  //   item.addEventListener('dblclick', (e) => {
+  //     e.stopPropagation();
+  //     driverTeams[i] = driverTeams[i] === 'purple' ? 'white' : 'purple';
+  //     renderAll();
+  //   });
+  //   legend.appendChild(item);
+  // });
 
   // Time axis
   renderTimeAxis('time-axis-race');
