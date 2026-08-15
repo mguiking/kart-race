@@ -135,8 +135,7 @@
 </head>
 <body>
 
-<h1>24H Kart Race Planner</h1>
-<p class="subtitle">39 stints &middot; 7 drivers &middot; equal drive time per driver</p>
+<h1>Kart Race Planner</h1>
 
 <div class="legend" id="legend"></div>
 
@@ -153,88 +152,40 @@
   <tbody></tbody>
 </table>
 
-<div class="section-title">Per-Driver Breakdown</div>
+<!-- <div class="section-title">Per-Driver Breakdown</div> -->
 <div class="stats-grid" id="stats-grid"></div>
 
 <script>
 // ── CONFIG ──────────────────────────────────────────────────────────────
-const TOTAL_STINTS = 39;
-const RACE_HOURS = 24;
+const TOTAL_STINTS = 6;
+const RACE_HOURS = 2
 const RACE_MINUTES = RACE_HOURS * 60;
-const RACE_START = 12 + 20/60; // 12:20
-const PITSTOP_SECONDS = 90;
+const RACE_START = 18 + 24/60; // 18:24 start time in hours
+const PITSTOP_SECONDS = 30;
 const PITSTOP_MINUTES = PITSTOP_SECONDS / 60; // 1.5 min
-const NUM_PITSTOPS = TOTAL_STINTS - 1; // 38
-const TOTAL_PITSTOP_MINUTES = NUM_PITSTOPS * PITSTOP_MINUTES; // 57 min
-const DRIVING_MINUTES = RACE_MINUTES - TOTAL_PITSTOP_MINUTES; // 1383 min
-const STRATEGY_SHIFTS = [7, 9, 8, 8, 7]; // stints per shift
-const SHIFT_TEAMS = ['purple', 'white', 'purple', 'white', 'purple'];
+const NUM_PITSTOPS = TOTAL_STINTS - 1; // 5
+const TOTAL_PITSTOP_MINUTES = NUM_PITSTOPS * PITSTOP_MINUTES; // 7.5 min
+const DRIVING_MINUTES = RACE_MINUTES - TOTAL_PITSTOP_MINUTES; // 1392.5 min
+const STRATEGY_SHIFTS = []; // stints per shift
+const SHIFT_TEAMS = ['purple'];
 const TEAM_COLORS = { purple: '#9b59b6', white: '#e0e0e0' };
 
 const drivers = [
-  { id: 0, name: "Bouw",     color: "#e74c3c" },
-  { id: 1, name: "Remy",   color: "#d1b735" },
-  { id: 2, name: "Boris",    color: "#2ecc71" },
-  { id: 3, name: "Remco",    color: "#3383d3" },
-  { id: 4, name: "Roel",   color: "#c57028" },
-  { id: 5, name: "Max",     color: "#ff9cf5" },
-  { id: 6, name: "Jesper",    color: "#6c646e" },
+  { id: 0, name: "Anas",     color: "#e74c3c" },
+  { id: 1, name: "Max",   color: "#d1b735" },
+  { id: 2, name: "Joppe",    color: "#2ecc71" }
 ];
 
 let driverTeams = [
   "purple",
   "purple",
-  "white",
-  "white",
-  "purple",
-  "white",
   "purple"
 ];
 
 // ── STINT ASSIGNMENT (default, overridden by localStorage) ─────────────
 // Driver ID for each of the 39 stints. 3 drivers do 5 stints, 4 do 6.
 // 3×5 + 4×6 = 39 ✓
-const defaultRaceSchedule = [
-  1,
-  0,
-  4,
-  6,
-  1,
-  0,
-  4,
-  2,
-  5,
-  3,
-  2,
-  5,
-  3,
-  2,
-  5,
-  3,
-  6,
-  1,
-  0,
-  4,
-  6,
-  1,
-  0,
-  4,
-  2,
-  5,
-  3,
-  2,
-  5,
-  3,
-  2,
-  5,
-  6,
-  1,
-  0,
-  4,
-  6,
-  1,
-  0
-]
+const defaultRaceSchedule = [0,1,2,0,1,2]
 let raceSchedule = [...defaultRaceSchedule];
 
 // ── LOCAL STORAGE ─────────────────────────────────────────────────────
@@ -520,26 +471,26 @@ function renderAll() {
     }
   });
 
-  // Stats cards
-  const grid = document.getElementById('stats-grid');
-  grid.innerHTML = '';
-  const fmtHrs = (min) => (min / 60).toFixed(1);
-  drivers.forEach((d, i) => {
-    const raceStintCount = stintCounts[i];
-    const raceMin = times.reduce((sum, t, s) => raceSchedule[s] === i ? sum + t.durationMin : sum, 0);
-    const durMin = raceStintCount > 0 ? Math.round(driverStintDuration[i]) : 0;
-    const restMin = RACE_MINUTES - raceMin;
+  // // Stats cards
+  // const grid = document.getElementById('stats-grid');
+  // grid.innerHTML = '';
+  // const fmtHrs = (min) => (min / 60).toFixed(1);
+  // drivers.forEach((d, i) => {
+  //   const raceStintCount = stintCounts[i];
+  //   const raceMin = times.reduce((sum, t, s) => raceSchedule[s] === i ? sum + t.durationMin : sum, 0);
+  //   const durMin = raceStintCount > 0 ? Math.round(driverStintDuration[i]) : 0;
+  //   const restMin = RACE_MINUTES - raceMin;
 
-    grid.innerHTML += `
-      <div class="driver-card" style="border-color:${d.color}">
-        <h3 style="color:${d.color}">${d.name}</h3>
-        <div class="stat">Racing: <span>${raceStintCount} stints × ${durMin} min = ${fmtHrs(raceMin)}h</span></div>
-        <div class="stat">Rest: <span>${fmtHrs(restMin)}h</span></div>
-        <div class="bar-container">
-          <div class="bar-fill" style="width:${(raceMin/RACE_MINUTES)*100}%;background:${d.color}"></div>
-        </div>
-      </div>`;
-  });
+  //   grid.innerHTML += `
+  //     <div class="driver-card" style="border-color:${d.color}">
+  //       <h3 style="color:${d.color}">${d.name}</h3>
+  //       <div class="stat">Racing: <span>${raceStintCount} stints × ${durMin} min = ${fmtHrs(raceMin)}h</span></div>
+  //       <div class="stat">Rest: <span>${fmtHrs(restMin)}h</span></div>
+  //       <div class="bar-container">
+  //         <div class="bar-fill" style="width:${(raceMin/RACE_MINUTES)*100}%;background:${d.color}"></div>
+  //       </div>
+  //     </div>`;
+  // });
 
   updateCrosshairs();
   saveState();
